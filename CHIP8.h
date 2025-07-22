@@ -21,6 +21,7 @@ class CHIP8 {
 
   public:
     void initialization();
+    int loadProgram();
     void CPUCycle();
 };
 #endif
