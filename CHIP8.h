@@ -1,8 +1,16 @@
 #ifndef CHIP8_H
 #define CHIP8_H
+
+const int screenWidth = 64;
+const int screenHeight = 32;
+const int screenPixelCount = screenWidth * screenHeight;
+const int RAMSize = 4096;
+const int interpretorSize = 512;
+const int fontSetSize = 80;
+
 class CHIP8 {
   private:
-    unsigned char RAM[4096];
+    unsigned char RAM[RAMSize];
     unsigned char V[16]; // CPU registers formaly named V0 - VE with the final register representing a 'carry flag'.
     unsigned short I; // Index register
     unsigned short pc; // Program counter
@@ -12,7 +20,7 @@ class CHIP8 {
     unsigned short stack[16];
     unsigned short stackPointer;
 
-    unsigned char graphicOutput[64*32]; // 64x32 resolution monochrome display.
+    unsigned char graphicOutput[screenPixelCount]; // 64x32 resolution monochrome display.
     unsigned char keypadState[16]; // 4x4 keypad for user input.
 
     // Both timers automatically tick down at 60hz when not 0

@@ -1,11 +1,8 @@
 #include <iostream>
 #include <fstream>
+#include <random>
 #include "CHIP8.h"
 
-const int screenPixelCount = 64*32;
-const int RAMSize = 4096;
-const int interpretorSize = 512;
-const int fontSetSize = 80;
 // Characters are 4x5, each byte represents a horizontal piece of it's respective character.
 const unsigned char CHIP8FontSet[fontSetSize] = {
   0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -25,6 +22,9 @@ const unsigned char CHIP8FontSet[fontSetSize] = {
   0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
   0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
+
+std::default_random_engine randGenerator;
+std::uniform_int_distribution<int> randDistribution(0, 255);
 
 void CHIP8::initialization() {
   pc = 0x200; // 0x000 to 0x1FF is reserved for the interpretor.
@@ -193,6 +193,8 @@ void CHIP8::CPUCycle() {
           }
           V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x0F00) >> 8] << 1;
           break;
+        default:
+          break;
       }
       break;
     // 9xy0 - SNE Vx, Vy
@@ -201,17 +203,103 @@ void CHIP8::CPUCycle() {
         pc += 0x2;
       }
       break;
+    // Annn - LD I, addr
     case 0xA000:
+      I = currentOpcode & 0x0FFF;
       break;
+    // Bnnn - JP V0, addr
     case 0xB000:
+      pc = I + V[0];
       break;
+    // Cxkk - RND Vx, byte
     case 0xC000:
+      V[(currentOpcode & 0x0F00) >> 8] = randDistribution(randGenerator) & (currentOpcode & 0x00FF);
       break;
+    // Dxyn - DRW Vx, Vy, nibble
     case 0xD000:
+      for(int i = 0; i < (currentOpcode & 0x000F); i++) {
+        for(int j = 0; j < 4; j++) {
+          int currentTargetedPixel = V[(currentOpcode & 0x0F00) >> 8] + j + (V[(currentOpcode & 0x0F00) >> 8] + i) * screenWidth;
+          graphicOutput[currentTargetedPixel] ^= (RAM[I + i] >> 7 - j) & 0x01;
+        }
+      }
       break;
     case 0xE000:
+      switch(currentOpcode & 0x00FF) {
+        // Ex9E - SKP Vx
+        case 0x009E:
+          if(keypadState[V[(currentOpcode & 0x0F00) >> 8]] != 0x00) {
+            pc += 0x2;
+          }
+          break;
+        // ExA1 - SKNP Vx
+        case 0x00A1:
+          if(keypadState[V[(currentOpcode & 0x0F00) >> 8]] == 0x00) {
+            pc += 0x2;
+          }
+          break;
+        default:
+          break;
+      }
       break;
     case 0xF000:
+      switch(currentOpcode & 0x00FF) {
+        // Fx07 - LD Vx, DT
+        case 0x0007:
+          V[(currentOpcode & 0x0F00) >> 8] = delayTimer;
+          break;
+        // Fx0A - LD Vx, K
+        case 0x000A:
+          [&]() {
+            while(true) {
+              for(int i = 0; i < 16; i++) {
+                if(keypadState[i]) {
+                  V[(currentOpcode & 0x0F00) >> 8] = i;
+                  return;
+                }
+              }
+            }
+          };
+          break;
+        // Fx15 - LD DT, Vx
+        case 0x0015:
+          delayTimer = V[(currentOpcode & 0x0F00) >> 8];
+          break;
+        // Fx18 - LD ST, Vx
+        case 0x0018:
+          soundTimer = V[(currentOpcode & 0x0F00) >> 8];
+          break;
+        // Fx1E - ADD I, Vx
+        case 0x001E:
+          I += V[(currentOpcode & 0x0F00) >> 8];
+          break;
+        // Fx29 - LD F, Vx
+        case 0x0029:
+          I = V[(currentOpcode & 0x0F00) >> 8] * 0x5;
+          break;
+        // Fx33 - LD B, Vx
+        case 0x0033:
+          RAM[I] = V[(currentOpcode & 0x0F00) >> 8] / 100;
+          RAM[I+1] = (V[(currentOpcode & 0x0F00) >> 8] / 10) - (RAM[I] * 10);
+          RAM[I+2] = V[(currentOpcode & 0x0F00) >> 8] - (RAM[I] * 100) - (RAM[I+1] * 10);
+          break;
+        // Fx55 - LD [I], Vx
+        case 0x0055:
+          // Iterator is j to avoid confusion.
+          for(int j = 0; j <= V[(currentOpcode & 0x0F00) >> 8]; j++) {
+            RAM[I + j] = V[j];
+          }
+          break;
+        // Fx65 - LD Vx, [I]
+        case 0x0065:
+          // Iterator is j to avoid confusion.
+          for(int j = 0; j <= V[(currentOpcode & 0x0F00) >> 8]; j++) {
+            V[j] = RAM[I + j];
+          }
+          break;
+        default:
+          break;
+      }
       break;
     default:
       break;
