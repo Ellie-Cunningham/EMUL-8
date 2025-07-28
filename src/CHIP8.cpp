@@ -47,9 +47,8 @@ void CHIP8::initialization() {
 int CHIP8::loadProgram() {
   // Open ROM file.
   std::fstream fout;
-  fout.open("testROM\\Pong (1 player).ch8", std::ios::in | std::ios::binary);
+  fout.open("..\\testROM\\Pong (1 player).ch8", std::ios::in | std::ios::binary);
   if(!fout) {
-    std::cout << "Error Accessing ROM" << std::endl;
     return -1;
   }
 
@@ -143,16 +142,18 @@ void CHIP8::CPUCycle() {
           break;
         // 8xy4 - ADD Vx, Vy
         case 0x0004:
-          unsigned char sum = V[(currentOpcode & 0x0F00) >> 8] + V[(currentOpcode & 0x00F0) >> 4];
-          // If resulting sum is less than original value and neither Vx or Vy are 0 (i.e. sum > 255).
-          if(sum < V[(currentOpcode & 0x0F00) >> 8] && V[(currentOpcode & 0x0F00) >> 8] != 0x00 && V[(currentOpcode & 0x00F0) >> 4] != 0x00) {
-            V[15] = 0x01;
-          }
-          else {
-            V[15] = 0x00;
-          }
-          V[(currentOpcode & 0x0F00) >> 8] = sum;
+          {
+            unsigned char sum = V[(currentOpcode & 0x0F00) >> 8] + V[(currentOpcode & 0x00F0) >> 4];
+            // If resulting sum is less than original value and neither Vx or Vy are 0 (i.e. sum > 255).
+            if(sum < V[(currentOpcode & 0x0F00) >> 8] && V[(currentOpcode & 0x0F00) >> 8] != 0x00 && V[(currentOpcode & 0x00F0) >> 4] != 0x00) {
+              V[15] = 0x01;
+            }
+            else {
+              V[15] = 0x00;
+            }
+            V[(currentOpcode & 0x0F00) >> 8] = sum;
           break;
+          }
         // 8xy5 - SUB Vx, Vy
         case 0x0005:
           if(V[(currentOpcode & 0x0F00) >> 8] > V[(currentOpcode & 0x00F0) >> 4]) {
@@ -304,4 +305,7 @@ void CHIP8::CPUCycle() {
     default:
       break;
   }
+
+  pc += 2;
+
 }
