@@ -20,14 +20,14 @@ class CHIP8 {
     unsigned short stack[16];
     unsigned short stackPointer;
 
-    unsigned char graphicOutput[screenPixelCount]; // 64x32 resolution monochrome display.
-    unsigned char keypadState[16]; // 4x4 keypad for user input.
-
     // Both timers automatically tick down at 60hz when not 0
     unsigned char delayTimer;
     unsigned char soundTimer;
 
   public:
+    unsigned char graphicOutput[screenPixelCount]; // 64x32 resolution monochrome display.
+    unsigned char keypadState[16]; // 4x4 keypad for user input.
+
     void initialization();
     int loadProgram();
     void CPUCycle();
