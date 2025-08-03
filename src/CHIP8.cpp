@@ -48,6 +48,7 @@ int CHIP8::loadProgram() {
   // Open ROM file.
   std::fstream fout;
   fout.open("..\\testROM\\Pong (1 player).ch8", std::ios::in | std::ios::binary);
+  // fout.open("..\\testROM\\4-flags.ch8", std::ios::in | std::ios::binary);
   if(!fout) {
     return -1;
   }
@@ -82,31 +83,32 @@ void CHIP8::CPUCycle() {
           stackPointer--;
           pc = stack[stackPointer];
           break;
-        // 0nnn - SYS addr
+        // 0nnn - SYS addr (ignored by most compilers)
         default:
-          pc = currentOpcode & 0x0FFF;
           break;
       }
       break;
     // 1nnn - JP addr
     case 0x1000:
       pc = currentOpcode & 0x0FFF;
+      pc -= 2;
       break;
     // 2nnn - CALL addr
     case 0x2000:
       stack[stackPointer] = pc;
       stackPointer++;
       pc = currentOpcode & 0x0FFF;
+      pc -= 2;
       break;
     // 3xkk - SE Vx, byte (Skip Equal)
     case 0x3000:
-      if(V[(currentOpcode & 0x0F00) >> 8] == currentOpcode & 0x00FF) {
+      if(V[(currentOpcode & 0x0F00) >> 8] == (unsigned char)(currentOpcode & 0x00FF)) {
         pc += 0x2;
       }
       break;
     // 4xkk - SNE Vx, byte (Skip Not Equal) 
     case 0x4000:
-      if(V[(currentOpcode & 0x0F00) >> 8] != currentOpcode & 0x00FF) {
+      if(V[(currentOpcode & 0x0F00) >> 8] != (unsigned char)(currentOpcode & 0x00FF)) {
         pc += 0x2;
       }
       break;
@@ -144,6 +146,7 @@ void CHIP8::CPUCycle() {
         case 0x0004:
           {
             unsigned char sum = V[(currentOpcode & 0x0F00) >> 8] + V[(currentOpcode & 0x00F0) >> 4];
+            V[(currentOpcode & 0x0F00) >> 8] = sum;
             // If resulting sum is less than original value and neither Vx or Vy are 0 (i.e. sum > 255).
             if(sum < V[(currentOpcode & 0x0F00) >> 8] && V[(currentOpcode & 0x0F00) >> 8] != 0x00 && V[(currentOpcode & 0x00F0) >> 4] != 0x00) {
               V[15] = 0x01;
@@ -151,18 +154,17 @@ void CHIP8::CPUCycle() {
             else {
               V[15] = 0x00;
             }
-            V[(currentOpcode & 0x0F00) >> 8] = sum;
           break;
           }
         // 8xy5 - SUB Vx, Vy
         case 0x0005:
+          V[(currentOpcode & 0x0F00) >> 8] -= V[(currentOpcode & 0x00F0) >> 4];
           if(V[(currentOpcode & 0x0F00) >> 8] > V[(currentOpcode & 0x00F0) >> 4]) {
-            V[15] = 1;
+            V[15] = 0x01;
           }
           else {
-            V[15] = 0;
+            V[15] = 0x00;
           }
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x0F00) >> 8] - V[(currentOpcode & 0x00F0) >> 4];
           break;
         // 8xy6 - SHR Vx {, Vy} (Shift Right)
         case 0x0006:
@@ -176,13 +178,13 @@ void CHIP8::CPUCycle() {
           break;
         // 8xy7 - SUBN Vx, Vy
         case 0x0007:
+          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x00F0) >> 4] - V[(currentOpcode & 0x0F00) >> 8];
           if (V[(currentOpcode & 0x0F00) >> 8] < V[(currentOpcode & 0x00F0) >> 4]) {
             V[15] = 0x01;
           }
           else {
             V[15] = 0x00;
           }
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x0F00) >> 8] - V[(currentOpcode & 0x00F0) >> 4];
           break;
         // 8xyE - SHL Vx {, Vy} (Shift Left)
         case 0x000E:
@@ -200,7 +202,9 @@ void CHIP8::CPUCycle() {
       break;
     // 9xy0 - SNE Vx, Vy
     case 0x9000:
+      // std::cout << (int)V[(currentOpcode & 0x0F00) >> 8] << " " << (int)V[(currentOpcode & 0x00F0) >> 4] << std::endl;
       if(V[(currentOpcode & 0x0F00) >> 8] != V[(currentOpcode & 0x00F0) >> 4]) {
+        // std::cout << "yay" << std::endl;
         pc += 0x2;
       }
       break;
@@ -210,7 +214,8 @@ void CHIP8::CPUCycle() {
       break;
     // Bnnn - JP V0, addr
     case 0xB000:
-      pc = I + V[0];
+      pc = (currentOpcode & 0x0FFF) + V[0];
+      pc -= 2;
       break;
     // Cxkk - RND Vx, byte
     case 0xC000:
@@ -219,11 +224,24 @@ void CHIP8::CPUCycle() {
     // Dxyn - DRW Vx, Vy, nibble
     case 0xD000:
       for(int i = 0; i < (currentOpcode & 0x000F); i++) {
-        for(int j = 0; j < 4; j++) {
-          int currentTargetedPixel = V[(currentOpcode & 0x0F00) >> 8] + j + (V[(currentOpcode & 0x0F00) >> 8] + i) * screenWidth;
-          graphicOutput[currentTargetedPixel] ^= (RAM[I + i] >> 7 - j) & 0x01;
+        for(int j = 0; j < 8; j++) {
+          int currentTargetedPixel = V[(currentOpcode & 0x0F00) >> 8] + j + (V[(currentOpcode & 0x00F0) >> 4] + i) * screenWidth;
+          graphicOutput[currentTargetedPixel] ^= (RAM[I + i] >> (7 - j)) & 0x01;
         }
       }
+
+      // for(int i = 0; i < screenHeight; i++) {
+      //   for(int j = 0; j < screenWidth; j++) {
+      //     if(graphicOutput[j + i*screenWidth] == 1) {
+      //       std::cout << "@";
+      //     }
+      //     else {
+      //       std::cout << " ";
+      //     }
+      //   }
+      //   std::cout << std::endl;
+      // }
+      // std::cout << "________________________________________________________________" << std::endl;
       break;
     case 0xE000:
       switch(currentOpcode & 0x00FF) {
@@ -247,19 +265,20 @@ void CHIP8::CPUCycle() {
       switch(currentOpcode & 0x00FF) {
         // Fx07 - LD Vx, DT
         case 0x0007:
-          V[(currentOpcode & 0x0F00) >> 8] = delayTimer;
+          V[((currentOpcode & 0x0F00) >> 8)] = delayTimer;
           break;
         // Fx0A - LD Vx, K
         case 0x000A:
           [&]() {
-            while(true) {
-              for(int i = 0; i < 16; i++) {
-                if(keypadState[i]) {
-                  V[(currentOpcode & 0x0F00) >> 8] = i;
-                  return;
-                }
+            for(int i = 0; i < 16; i++) {
+              if(keypadState[i] == 1) {
+                V[(currentOpcode & 0x0F00) >> 8] = i;
+                return;
               }
             }
+            std::cout << "eeee" << std::endl;
+            pc -= 2;
+            return;
           };
           break;
         // Fx15 - LD DT, Vx
@@ -287,14 +306,14 @@ void CHIP8::CPUCycle() {
         // Fx55 - LD [I], Vx
         case 0x0055:
           // Iterator is j to avoid confusion.
-          for(int j = 0; j <= V[(currentOpcode & 0x0F00) >> 8]; j++) {
+          for(int j = 0; j <= (currentOpcode & 0x0F00) >> 8; j++) {
             RAM[I + j] = V[j];
           }
           break;
         // Fx65 - LD Vx, [I]
         case 0x0065:
           // Iterator is j to avoid confusion.
-          for(int j = 0; j <= V[(currentOpcode & 0x0F00) >> 8]; j++) {
+          for(int j = 0; j <= (currentOpcode & 0x0F00) >> 8; j++) {
             V[j] = RAM[I + j];
           }
           break;

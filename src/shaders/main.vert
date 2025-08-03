@@ -16,7 +16,7 @@ void main() {
     float row = float(gl_VertexID / width);
     float col = float(gl_VertexID % width);
 
-    gl_Position = vec4(col * cellWidth - 1.0, row * cellHeight - 1.0, 0.0, 1.0);
+    gl_Position = vec4(col * cellWidth - 1.0, 1.0 - row * cellHeight, 0.0, 1.0);
     vs_out.valid = 1;
   }
   else {

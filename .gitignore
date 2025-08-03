@@ -4,3 +4,4 @@
 /testROM
 /src/glad.c
 /*.exe
+/chip8error.txt

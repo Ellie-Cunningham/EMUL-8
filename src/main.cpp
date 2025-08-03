@@ -1,6 +1,9 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <chrono>
+#include <thread>
+#include <cstring>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "CHIP8.h"
@@ -26,7 +29,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
   for(int k : keyMap) {
     if(k == key) {
       Chip8.keypadState[i] = static_cast<unsigned char>(keyIsPressedDown);
-      std::cout << (int)(Chip8.keypadState[i]) << std::endl;
+      // std::cout << (int)(Chip8.keypadState[i]) << std::endl;
     }
     i++;
   }
@@ -147,12 +150,32 @@ int main() {
 
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, screenPixelCount, Chip8.graphicOutput);
+
+    GLvoid* mapPtr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+    if (!mapPtr) {
+      std::cerr << "Failed to map buffer" << std::endl;
+    }
+    std::memcpy(mapPtr, Chip8.graphicOutput, screenPixelCount);
+    glUnmapBuffer(GL_ARRAY_BUFFER);
 
     glUseProgram(shaderProgram);
     glDrawArrays(GL_POINTS, 0, screenPixelCount);
 
     glfwSwapBuffers(window);
+    for(int i = 0; i < 10; i++) {
+      glfwPollEvents();
+      Chip8.CPUCycle();
+    }
+
+    if(Chip8.delayTimer > 0) {
+      Chip8.delayTimer--;
+    }
+
+    if(Chip8.soundTimer > 0) {
+      Chip8.soundTimer--;
+    }
+    
+    std::this_thread::sleep_for(std::chrono::milliseconds(16));
   }
 
   // Clean up buffers and arrays
