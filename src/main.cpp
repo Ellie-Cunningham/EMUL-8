@@ -11,10 +11,22 @@
 CHIP8 Chip8;
 
 const int keyMap[] = {
-  GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4,
-  GLFW_KEY_Q, GLFW_KEY_W, GLFW_KEY_E, GLFW_KEY_R,
-  GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D, GLFW_KEY_F,
-  GLFW_KEY_Z, GLFW_KEY_X, GLFW_KEY_C, GLFW_KEY_V,
+  GLFW_KEY_X, // 0
+  GLFW_KEY_1, // 1
+  GLFW_KEY_2, // 2
+  GLFW_KEY_3, // 3
+  GLFW_KEY_Q, // 4
+  GLFW_KEY_W, // 5
+  GLFW_KEY_E, // 6
+  GLFW_KEY_A, // 7
+  GLFW_KEY_S, // 8
+  GLFW_KEY_D, // 9
+  GLFW_KEY_Z, // A
+  GLFW_KEY_C, // B
+  GLFW_KEY_4, // C
+  GLFW_KEY_R, // D
+  GLFW_KEY_F, // E
+  GLFW_KEY_V  // F
 };
 
 const int windowWidth = 640;

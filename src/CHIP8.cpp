@@ -47,8 +47,8 @@ void CHIP8::initialization() {
 int CHIP8::loadProgram() {
   // Open ROM file.
   std::fstream fout;
-  fout.open("..\\testROM\\Pong (1 player).ch8", std::ios::in | std::ios::binary);
-  // fout.open("..\\testROM\\4-flags.ch8", std::ios::in | std::ios::binary);
+  // fout.open("..\\testROM\\br8kout.ch8", std::ios::in | std::ios::binary);
+  fout.open("..\\testROM\\4-flags.ch8", std::ios::in | std::ios::binary);
   if(!fout) {
     return -1;
   }
@@ -60,7 +60,7 @@ int CHIP8::loadProgram() {
   fout.close();
 
   // Write ROM into memory.
-  for(int i = 0; i <sizeof(ROM)/sizeof(char); i++) {
+  for(int i = 0; i < sizeof(ROM)/sizeof(char); i++) {
     RAM[interpretorSize + i] = ROM[i];
   }
 
@@ -70,7 +70,16 @@ int CHIP8::loadProgram() {
 void CHIP8::CPUCycle() {
   currentOpcode = (RAM[pc] << 8) | RAM[pc + 1];
 
-  // Determine and execute given instruction.
+  const unsigned char xNibble = (currentOpcode & 0x0F00) >> 8; // Second opcode nibble.
+  const unsigned char yNibble = (currentOpcode & 0x00F0) >> 4; // Third opcode nibble.
+  const unsigned char kkByte = currentOpcode & 0x00FF; // Second opcode byte.
+  const unsigned short nnn = currentOpcode & 0x0FFF; // Opcode excluding most significant nibble.
+
+  /* Determine and execute given instruction.
+   * 
+   * All opcodes are labeled. For a more detailed breakdown of their intended function I recommend referring to Cowgod's Technical Reference page:
+   * http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#0.0
+   */
   switch(currentOpcode & 0xF000) {
     case 0x0000:
       switch(currentOpcode) {
@@ -90,111 +99,97 @@ void CHIP8::CPUCycle() {
       break;
     // 1nnn - JP addr
     case 0x1000:
-      pc = currentOpcode & 0x0FFF;
+      pc = nnn;
       pc -= 2;
       break;
     // 2nnn - CALL addr
     case 0x2000:
       stack[stackPointer] = pc;
       stackPointer++;
-      pc = currentOpcode & 0x0FFF;
+      pc = nnn;
       pc -= 2;
       break;
     // 3xkk - SE Vx, byte (Skip Equal)
     case 0x3000:
-      if(V[(currentOpcode & 0x0F00) >> 8] == (unsigned char)(currentOpcode & 0x00FF)) {
+      if(V[xNibble] == kkByte) {
         pc += 0x2;
       }
       break;
     // 4xkk - SNE Vx, byte (Skip Not Equal) 
     case 0x4000:
-      if(V[(currentOpcode & 0x0F00) >> 8] != (unsigned char)(currentOpcode & 0x00FF)) {
+      if(V[xNibble] != kkByte) {
         pc += 0x2;
       }
       break;
     // 5xy0 - SE Vx, Vy (Skip Equal)
     case 0x5000:
-      if(V[(currentOpcode & 0x0F00) >> 8] == V[(currentOpcode & 0x00F0) >> 4])
+      if(V[xNibble] == V[yNibble])
       break;
     // 6xkk - LD Vx, byte
     case 0x6000:
-      V[(currentOpcode & 0x0F00) >> 8] = currentOpcode & 0x00FF;
+      V[xNibble] = kkByte;
       break;
     // 7xkk - ADD Vx, byte
     case 0x7000:
-      V[(currentOpcode & 0x0F00) >> 8] += currentOpcode & 0x00FF;
+      V[xNibble] += kkByte;
       break;
     case 0x8000:
       switch(currentOpcode & 0x000F) {
         // 8xy0 - LD Vx, Vy
         case 0x0000:
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x00F0) >> 4];
+          V[xNibble] = V[yNibble];
           break;
         // 8xy1 - OR Vx, Vy
         case 0x0001:
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x0F00) >> 8] | V[(currentOpcode & 0x00F0) >> 4];
+          V[xNibble] = (V[xNibble] | V[yNibble]);
           break;
         // 8xy2 - AND Vx, Vy
         case 0x0002:
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x0F00) >> 8] & V[(currentOpcode & 0x00F0) >> 4];
+          V[xNibble] = (V[xNibble] & V[yNibble]);
           break;
         // 8xy3 - XOR Vx, Vy
         case 0x0003:
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x0F00) >> 8] ^ V[(currentOpcode & 0x00F0) >> 4];
+          V[xNibble] = (V[xNibble] ^ V[yNibble]);
           break;
         // 8xy4 - ADD Vx, Vy
         case 0x0004:
           {
-            unsigned char sum = V[(currentOpcode & 0x0F00) >> 8] + V[(currentOpcode & 0x00F0) >> 4];
-            V[(currentOpcode & 0x0F00) >> 8] = sum;
-            // If resulting sum is less than original value and neither Vx or Vy are 0 (i.e. sum > 255).
-            if(sum < V[(currentOpcode & 0x0F00) >> 8] && V[(currentOpcode & 0x0F00) >> 8] != 0x00 && V[(currentOpcode & 0x00F0) >> 4] != 0x00) {
-              V[15] = 0x01;
-            }
-            else {
-              V[15] = 0x00;
-            }
-          break;
+            int sum = V[xNibble] + V[yNibble];
+            V[15] = (sum > 0xFF);
+            V[xNibble] = (unsigned char)sum;
           }
+          break;
         // 8xy5 - SUB Vx, Vy
         case 0x0005:
-          V[(currentOpcode & 0x0F00) >> 8] -= V[(currentOpcode & 0x00F0) >> 4];
-          if(V[(currentOpcode & 0x0F00) >> 8] > V[(currentOpcode & 0x00F0) >> 4]) {
-            V[15] = 0x01;
-          }
-          else {
-            V[15] = 0x00;
+          {
+            unsigned char difference = V[xNibble] - V[yNibble];
+            V[15] = (V[xNibble] >= V[yNibble]);
+            V[xNibble] = difference;
           }
           break;
         // 8xy6 - SHR Vx {, Vy} (Shift Right)
         case 0x0006:
-          if(V[(currentOpcode & 0x0F00) >> 8] & 0x01 == 0x01) {
-            V[15] = 0x01;
+          {
+            unsigned char unshifted = V[xNibble];
+            V[xNibble] = unshifted >> 1;
+            V[15] = ((unshifted & 0x01) == 0x01);
           }
-          else {
-            V[15] = 0x00;
-          }
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x0F00) >> 8] >> 1;
           break;
         // 8xy7 - SUBN Vx, Vy
         case 0x0007:
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x00F0) >> 4] - V[(currentOpcode & 0x0F00) >> 8];
-          if (V[(currentOpcode & 0x0F00) >> 8] < V[(currentOpcode & 0x00F0) >> 4]) {
-            V[15] = 0x01;
-          }
-          else {
-            V[15] = 0x00;
+          {
+            unsigned char difference = V[yNibble] - V[xNibble];
+            V[xNibble] = difference;
+            V[15] = (V[xNibble] < V[yNibble]);
           }
           break;
         // 8xyE - SHL Vx {, Vy} (Shift Left)
         case 0x000E:
-          if(V[(currentOpcode & 0x0F00) >> 8] & 0x80 == 0x80) {
-            V[15] = 0x01;
+          {
+            unsigned char unshifted = V[xNibble];
+            V[xNibble] = unshifted << 1;
+            V[15] = ((unshifted & 0x80) == 0x80);
           }
-          else {
-            V[15] = 0x00;
-          }
-          V[(currentOpcode & 0x0F00) >> 8] = V[(currentOpcode & 0x0F00) >> 8] << 1;
           break;
         default:
           break;
@@ -202,34 +197,35 @@ void CHIP8::CPUCycle() {
       break;
     // 9xy0 - SNE Vx, Vy
     case 0x9000:
-      // std::cout << (int)V[(currentOpcode & 0x0F00) >> 8] << " " << (int)V[(currentOpcode & 0x00F0) >> 4] << std::endl;
-      if(V[(currentOpcode & 0x0F00) >> 8] != V[(currentOpcode & 0x00F0) >> 4]) {
-        // std::cout << "yay" << std::endl;
+      if(V[xNibble] != V[yNibble]) {
         pc += 0x2;
       }
       break;
     // Annn - LD I, addr
     case 0xA000:
-      I = currentOpcode & 0x0FFF;
+      I = nnn;
       break;
     // Bnnn - JP V0, addr
     case 0xB000:
-      pc = (currentOpcode & 0x0FFF) + V[0];
+      pc = nnn + V[0];
       pc -= 2;
       break;
     // Cxkk - RND Vx, byte
     case 0xC000:
-      V[(currentOpcode & 0x0F00) >> 8] = randDistribution(randGenerator) & (currentOpcode & 0x00FF);
+      V[xNibble] = randDistribution(randGenerator) & kkByte;
       break;
     // Dxyn - DRW Vx, Vy, nibble
     case 0xD000:
       for(int i = 0; i < (currentOpcode & 0x000F); i++) {
         for(int j = 0; j < 8; j++) {
-          int currentTargetedPixel = V[(currentOpcode & 0x0F00) >> 8] + j + (V[(currentOpcode & 0x00F0) >> 4] + i) * screenWidth;
+          int currentTargetedPixel = V[xNibble] + j + (V[yNibble] + i) * screenWidth;
           graphicOutput[currentTargetedPixel] ^= (RAM[I + i] >> (7 - j)) & 0x01;
         }
       }
-
+      
+      /* Displays graphicOutput to console.
+       * Will be removed once I'm confident all persisting display issues are fixed.
+       */
       // for(int i = 0; i < screenHeight; i++) {
       //   for(int j = 0; j < screenWidth; j++) {
       //     if(graphicOutput[j + i*screenWidth] == 1) {
@@ -244,16 +240,16 @@ void CHIP8::CPUCycle() {
       // std::cout << "________________________________________________________________" << std::endl;
       break;
     case 0xE000:
-      switch(currentOpcode & 0x00FF) {
+      switch(kkByte) {
         // Ex9E - SKP Vx
         case 0x009E:
-          if(keypadState[V[(currentOpcode & 0x0F00) >> 8]] != 0x00) {
+          if(keypadState[V[xNibble]] != 0x00) {
             pc += 0x2;
           }
           break;
         // ExA1 - SKNP Vx
         case 0x00A1:
-          if(keypadState[V[(currentOpcode & 0x0F00) >> 8]] == 0x00) {
+          if(keypadState[V[xNibble]] == 0x00) {
             pc += 0x2;
           }
           break;
@@ -262,17 +258,17 @@ void CHIP8::CPUCycle() {
       }
       break;
     case 0xF000:
-      switch(currentOpcode & 0x00FF) {
+      switch(kkByte) {
         // Fx07 - LD Vx, DT
         case 0x0007:
-          V[((currentOpcode & 0x0F00) >> 8)] = delayTimer;
+          V[xNibble] = delayTimer;
           break;
         // Fx0A - LD Vx, K
         case 0x000A:
           [&]() {
             for(int i = 0; i < 16; i++) {
-              if(keypadState[i] == 1) {
-                V[(currentOpcode & 0x0F00) >> 8] = i;
+              if(keypadState[i]) {
+                V[xNibble] = i;
                 return;
               }
             }
@@ -283,37 +279,37 @@ void CHIP8::CPUCycle() {
           break;
         // Fx15 - LD DT, Vx
         case 0x0015:
-          delayTimer = V[(currentOpcode & 0x0F00) >> 8];
+          delayTimer = V[xNibble];
           break;
         // Fx18 - LD ST, Vx
         case 0x0018:
-          soundTimer = V[(currentOpcode & 0x0F00) >> 8];
+          soundTimer = V[xNibble];
           break;
         // Fx1E - ADD I, Vx
         case 0x001E:
-          I += V[(currentOpcode & 0x0F00) >> 8];
+          I += V[xNibble];
           break;
         // Fx29 - LD F, Vx
         case 0x0029:
-          I = V[(currentOpcode & 0x0F00) >> 8] * 0x5;
+          I = V[xNibble] * 0x5;
           break;
         // Fx33 - LD B, Vx
         case 0x0033:
-          RAM[I] = V[(currentOpcode & 0x0F00) >> 8] / 100;
-          RAM[I+1] = (V[(currentOpcode & 0x0F00) >> 8] / 10) - (RAM[I] * 10);
-          RAM[I+2] = V[(currentOpcode & 0x0F00) >> 8] - (RAM[I] * 100) - (RAM[I+1] * 10);
+          RAM[I] = V[xNibble] / 100;
+          RAM[I+1] = (V[xNibble] / 10) - (RAM[I] * 10);
+          RAM[I+2] = V[xNibble] - (RAM[I] * 100) - (RAM[I+1] * 10);
           break;
         // Fx55 - LD [I], Vx
         case 0x0055:
           // Iterator is j to avoid confusion.
-          for(int j = 0; j <= (currentOpcode & 0x0F00) >> 8; j++) {
+          for(int j = 0; j <= xNibble; j++) {
             RAM[I + j] = V[j];
           }
           break;
         // Fx65 - LD Vx, [I]
         case 0x0065:
           // Iterator is j to avoid confusion.
-          for(int j = 0; j <= (currentOpcode & 0x0F00) >> 8; j++) {
+          for(int j = 0; j <= xNibble; j++) {
             V[j] = RAM[I + j];
           }
           break;
