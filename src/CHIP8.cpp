@@ -47,8 +47,9 @@ void CHIP8::initialization() {
 int CHIP8::loadProgram() {
   // Open ROM file.
   std::fstream fout;
+  // fout.open("..\\testROM\\Pong (1 player).ch8", std::ios::in | std::ios::binary);
   // fout.open("..\\testROM\\br8kout.ch8", std::ios::in | std::ios::binary);
-  fout.open("..\\testROM\\4-flags.ch8", std::ios::in | std::ios::binary);
+  fout.open("..\\testROM\\3-corax+.ch8", std::ios::in | std::ios::binary);
   if(!fout) {
     return -1;
   }
@@ -72,13 +73,14 @@ void CHIP8::CPUCycle() {
 
   const unsigned char xNibble = (currentOpcode & 0x0F00) >> 8; // Second opcode nibble.
   const unsigned char yNibble = (currentOpcode & 0x00F0) >> 4; // Third opcode nibble.
+  const unsigned char nNibble = currentOpcode & 0x000F; // Fourth opcode nibble.
   const unsigned char kkByte = currentOpcode & 0x00FF; // Second opcode byte.
   const unsigned short nnn = currentOpcode & 0x0FFF; // Opcode excluding most significant nibble.
 
   /* Determine and execute given instruction.
    * 
-   * All opcodes are labeled. For a more detailed breakdown of their intended function I recommend referring to Cowgod's Technical Reference page:
-   * http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#0.0
+   * All opcodes are labeled. For a more detailed breakdown of their intended function I recommend referring to Gulrak's Variant Opcode Table:
+   * https://chip8.gulrak.net/
    */
   switch(currentOpcode & 0xF000) {
     case 0x0000:
@@ -123,7 +125,9 @@ void CHIP8::CPUCycle() {
       break;
     // 5xy0 - SE Vx, Vy (Skip Equal)
     case 0x5000:
-      if(V[xNibble] == V[yNibble])
+      if(V[xNibble] == V[yNibble]) {
+        pc += 0x2;
+      }
       break;
     // 6xkk - LD Vx, byte
     case 0x6000:
@@ -134,22 +138,25 @@ void CHIP8::CPUCycle() {
       V[xNibble] += kkByte;
       break;
     case 0x8000:
-      switch(currentOpcode & 0x000F) {
+      switch(nNibble) {
         // 8xy0 - LD Vx, Vy
         case 0x0000:
           V[xNibble] = V[yNibble];
           break;
         // 8xy1 - OR Vx, Vy
         case 0x0001:
-          V[xNibble] = (V[xNibble] | V[yNibble]);
+          V[xNibble] |= V[yNibble];
+          V[15] = 0x00;
           break;
         // 8xy2 - AND Vx, Vy
         case 0x0002:
-          V[xNibble] = (V[xNibble] & V[yNibble]);
+          V[xNibble] &= V[yNibble];
+          V[15] = 0x00;
           break;
         // 8xy3 - XOR Vx, Vy
         case 0x0003:
-          V[xNibble] = (V[xNibble] ^ V[yNibble]);
+          V[xNibble] ^= V[yNibble];
+          V[15] = 0x00;
           break;
         // 8xy4 - ADD Vx, Vy
         case 0x0004:
@@ -170,7 +177,7 @@ void CHIP8::CPUCycle() {
         // 8xy6 - SHR Vx {, Vy} (Shift Right)
         case 0x0006:
           {
-            unsigned char unshifted = V[xNibble];
+            unsigned char unshifted = V[yNibble];
             V[xNibble] = unshifted >> 1;
             V[15] = ((unshifted & 0x01) == 0x01);
           }
@@ -180,13 +187,13 @@ void CHIP8::CPUCycle() {
           {
             unsigned char difference = V[yNibble] - V[xNibble];
             V[xNibble] = difference;
-            V[15] = (V[xNibble] < V[yNibble]);
+            V[15] = (V[xNibble] <= V[yNibble]);
           }
           break;
         // 8xyE - SHL Vx {, Vy} (Shift Left)
         case 0x000E:
           {
-            unsigned char unshifted = V[xNibble];
+            unsigned char unshifted = V[yNibble];
             V[xNibble] = unshifted << 1;
             V[15] = ((unshifted & 0x80) == 0x80);
           }
@@ -216,40 +223,62 @@ void CHIP8::CPUCycle() {
       break;
     // Dxyn - DRW Vx, Vy, nibble
     case 0xD000:
-      for(int i = 0; i < (currentOpcode & 0x000F); i++) {
-        for(int j = 0; j < 8; j++) {
-          int currentTargetedPixel = V[xNibble] + j + (V[yNibble] + i) * screenWidth;
-          graphicOutput[currentTargetedPixel] ^= (RAM[I + i] >> (7 - j)) & 0x01;
+      {
+        // Carry flag set to 0 by default, 1 if a pixel is erased when drawing.
+        V[15] = 0x00;
+
+        // Screen wraps only occur if entire sprite would be drawn off screen.
+        const bool horizontalWraparound = ((V[xNibble] % screenWidth) <= (screenWidth - 8));
+        const bool verticalWraparound = ((V[yNibble] % screenHeight) <= (screenHeight - nNibble));
+
+        for(int i = 0; i < nNibble; i++) {
+            if((V[yNibble] + i) > (screenHeight - 1) && !verticalWraparound) {
+              break;
+            }
+
+            for(int j = 0; j < 8; j++) {
+              if((V[xNibble] + j) > (screenWidth - 1) && !horizontalWraparound) {
+                break;
+              }
+
+              int currentTargetedPixel = (V[xNibble] + j) % screenWidth + ((V[yNibble] + i) % screenHeight) * screenWidth;
+              bool modifyPixel = ((RAM[I + i] >> (7 - j)) & 0x01);
+              graphicOutput[currentTargetedPixel] ^= modifyPixel;
+              
+              if(!graphicOutput[currentTargetedPixel] && modifyPixel) {
+                V[15] = 0x01;
+              }
+            }
         }
+        
+        /* Displays graphicOutput to console.
+        * Will be removed once I'm confident all persisting display issues are fixed.
+        */
+        // for(int i = 0; i < screenHeight; i++) {
+        //   for(int j = 0; j < screenWidth; j++) {
+        //     if(graphicOutput[j + i*screenWidth] == 1) {
+        //       std::cout << "@";
+        //     }
+        //     else {
+        //       std::cout << " ";
+        //     }
+        //   }
+        //   std::cout << std::endl;
+        // }
+        // std::cout << "________________________________________________________________" << std::endl;
       }
-      
-      /* Displays graphicOutput to console.
-       * Will be removed once I'm confident all persisting display issues are fixed.
-       */
-      // for(int i = 0; i < screenHeight; i++) {
-      //   for(int j = 0; j < screenWidth; j++) {
-      //     if(graphicOutput[j + i*screenWidth] == 1) {
-      //       std::cout << "@";
-      //     }
-      //     else {
-      //       std::cout << " ";
-      //     }
-      //   }
-      //   std::cout << std::endl;
-      // }
-      // std::cout << "________________________________________________________________" << std::endl;
       break;
     case 0xE000:
       switch(kkByte) {
         // Ex9E - SKP Vx
         case 0x009E:
-          if(keypadState[V[xNibble]] != 0x00) {
+          if(keypadState[V[xNibble]]) {
             pc += 0x2;
           }
           break;
         // ExA1 - SKNP Vx
         case 0x00A1:
-          if(keypadState[V[xNibble]] == 0x00) {
+          if(!keypadState[V[xNibble]]) {
             pc += 0x2;
           }
           break;
@@ -268,7 +297,7 @@ void CHIP8::CPUCycle() {
           [&]() {
             for(int i = 0; i < 16; i++) {
               if(keypadState[i]) {
-                V[xNibble] = i;
+                V[xNibble] = (unsigned char)i;
                 return;
               }
             }
@@ -303,14 +332,16 @@ void CHIP8::CPUCycle() {
         case 0x0055:
           // Iterator is j to avoid confusion.
           for(int j = 0; j <= xNibble; j++) {
-            RAM[I + j] = V[j];
+            RAM[I] = V[j];
+            I++;
           }
           break;
         // Fx65 - LD Vx, [I]
         case 0x0065:
           // Iterator is j to avoid confusion.
           for(int j = 0; j <= xNibble; j++) {
-            V[j] = RAM[I + j];
+            V[j] = RAM[I];
+            I++;
           }
           break;
         default:
