@@ -8,6 +8,12 @@ const int RAMSize = 4096;
 const int interpretorSize = 512;
 const int fontSetSize = 80;
 
+enum HaltState {
+  NOT_HALTING = 0, // Default state, continue CPU cycles.
+  AWAITING_KEY_PRESS = 1, // CPU begins halting, exits into AWAITING_KEY_RELEASE once key is pressed.
+  AWAITING_KEY_RELEASE = 2 // CPU continues halting, exits into NOT_HALTING once key is released.
+};
+
 class CHIP8 {
   private:
     unsigned char RAM[RAMSize];
@@ -28,8 +34,11 @@ class CHIP8 {
     unsigned char delayTimer;
     unsigned char soundTimer;
 
+    unsigned short getLastExecutedOpcode();
+    void registerValueOverride(int registerIndex, int registerValue);
+    void outputScreenToConsole();
     void initialization();
     int loadProgram();
-    void CPUCycle();
+    int CPUCycle();
 };
 #endif

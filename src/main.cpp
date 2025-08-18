@@ -9,6 +9,9 @@
 #include "CHIP8.h"
 
 CHIP8 Chip8;
+HaltState currentHaltState = NOT_HALTING;
+unsigned char keypadStateBeforeHalt[16];
+int keyPressedDuringHalt = 0;
 
 const int keyMap[] = {
   GLFW_KEY_X, // 0
@@ -33,17 +36,34 @@ const int windowWidth = 640;
 const int windowHeight = 360;
 const int pixelSize = 10;
 
-// Updates keypadState. Runs everytime user interacts with keyboard.
+// Updates keypadState. Checks conditions to exit states where cpu is halted. Runs everytime user interacts with keyboard.
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
   bool keyIsPressedDown = !(action == GLFW_RELEASE);
+  bool keyIsHeldDown = (action == GLFW_REPEAT);
+
+  if(keyIsHeldDown) {
+    return;
+  }
 
   int i = 0;
   for(int k : keyMap) {
     if(k == key) {
       Chip8.keypadState[i] = static_cast<unsigned char>(keyIsPressedDown);
-      // std::cout << (int)(Chip8.keypadState[i]) << std::endl;
+      break;
     }
     i++;
+  }
+
+  if(currentHaltState == HaltState::AWAITING_KEY_PRESS && keyIsPressedDown) {
+    int registerIndex = (Chip8.getLastExecutedOpcode() & 0x0F00) >> 8;
+    Chip8.registerValueOverride(registerIndex, i);
+
+    keyPressedDuringHalt = key;
+    currentHaltState = HaltState::AWAITING_KEY_RELEASE;
+  }
+
+  if(currentHaltState == HaltState::AWAITING_KEY_RELEASE && !keyIsPressedDown && keyPressedDuringHalt == key) {
+    currentHaltState = HaltState::NOT_HALTING;
   }
 }
 
@@ -108,6 +128,8 @@ int generateShaderProgram(char* vertexShaderPath, char* fragmentShaderPath, char
 }
 
 int main() {
+  std::fill_n(keypadStateBeforeHalt, 16, 0);
+
   // Step 1: setup graphics and input systems
   GLFWwindow* window;
   if(!glfwInit()) {
@@ -157,7 +179,9 @@ int main() {
   // Step 3: Loop CPU cycles
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   while(!glfwWindowShouldClose(window)) {
+    auto startTime = std::chrono::high_resolution_clock::now();
     glfwPollEvents();
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glBindVertexArray(VAO);
@@ -174,9 +198,17 @@ int main() {
     glDrawArrays(GL_POINTS, 0, screenPixelCount);
 
     glfwSwapBuffers(window);
-    for(int i = 0; i < 10; i++) {
-      glfwPollEvents();
-      Chip8.CPUCycle();
+
+    if(currentHaltState == HaltState::NOT_HALTING) {
+      for(int i = 0; i < 10; i++) {
+        glfwPollEvents();
+        currentHaltState = (HaltState)Chip8.CPUCycle();
+
+        if(currentHaltState != HaltState::NOT_HALTING) {
+          std::copy(Chip8.keypadState, Chip8.keypadState + 16, keypadStateBeforeHalt);
+          break;
+        }
+      }
     }
 
     if(Chip8.delayTimer > 0) {
@@ -187,7 +219,7 @@ int main() {
       Chip8.soundTimer--;
     }
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    std::this_thread::sleep_until(startTime + std::chrono::milliseconds(16));
   }
 
   // Clean up buffers and arrays

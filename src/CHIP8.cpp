@@ -26,6 +26,35 @@ const unsigned char CHIP8FontSet[fontSetSize] = {
 std::default_random_engine randGenerator;
 std::uniform_int_distribution<int> randDistribution(0, 255);
 
+unsigned short CHIP8::getLastExecutedOpcode() {
+  try {
+    return currentOpcode;
+  }
+  catch(...) {
+    std::cout << "Couldn't get opcode: CHIP8 object may not have been initialized." << std::endl;
+    return 0x0000;
+  }
+}
+
+void CHIP8::registerValueOverride(int registerIndex, int registerValue) {
+  V[registerIndex] = (unsigned char)registerValue;
+}
+
+void CHIP8::outputScreenToConsole() {
+  for(int i = 0; i < screenHeight; i++) {
+    for(int j = 0; j < screenWidth; j++) {
+      if(graphicOutput[j + i*screenWidth] == 1) {
+        std::cout << "@";
+      }
+      else {
+        std::cout << " ";
+      }
+    }
+    std::cout << std::endl;
+  }
+  std::cout << "________________________________________________________________" << std::endl;
+}
+
 void CHIP8::initialization() {
   pc = 0x200; // 0x000 to 0x1FF is reserved for the interpretor.
   currentOpcode = 0;
@@ -49,7 +78,7 @@ int CHIP8::loadProgram() {
   std::fstream fout;
   // fout.open("..\\testROM\\Pong (1 player).ch8", std::ios::in | std::ios::binary);
   // fout.open("..\\testROM\\br8kout.ch8", std::ios::in | std::ios::binary);
-  fout.open("..\\testROM\\3-corax+.ch8", std::ios::in | std::ios::binary);
+  fout.open("..\\testROM\\6-keypad.ch8", std::ios::in | std::ios::binary);
   if(!fout) {
     return -1;
   }
@@ -68,7 +97,8 @@ int CHIP8::loadProgram() {
   return 0;
 }
 
-void CHIP8::CPUCycle() {
+// Returns whether or not to simulate halting for opcode Fx0A
+int CHIP8::CPUCycle() {
   currentOpcode = (RAM[pc] << 8) | RAM[pc + 1];
 
   const unsigned char xNibble = (currentOpcode & 0x0F00) >> 8; // Second opcode nibble.
@@ -250,22 +280,6 @@ void CHIP8::CPUCycle() {
               }
             }
         }
-        
-        /* Displays graphicOutput to console.
-        * Will be removed once I'm confident all persisting display issues are fixed.
-        */
-        // for(int i = 0; i < screenHeight; i++) {
-        //   for(int j = 0; j < screenWidth; j++) {
-        //     if(graphicOutput[j + i*screenWidth] == 1) {
-        //       std::cout << "@";
-        //     }
-        //     else {
-        //       std::cout << " ";
-        //     }
-        //   }
-        //   std::cout << std::endl;
-        // }
-        // std::cout << "________________________________________________________________" << std::endl;
       }
       break;
     case 0xE000:
@@ -294,17 +308,9 @@ void CHIP8::CPUCycle() {
           break;
         // Fx0A - LD Vx, K
         case 0x000A:
-          [&]() {
-            for(int i = 0; i < 16; i++) {
-              if(keypadState[i]) {
-                V[xNibble] = (unsigned char)i;
-                return;
-              }
-            }
-            std::cout << "eeee" << std::endl;
-            pc -= 2;
-            return;
-          };
+          // CPU cycles are paused until key is pressed and released. remainder of opcode logic handled in the keyCallback method in main.cpp
+          pc += 2;
+          return (int)HaltState::AWAITING_KEY_PRESS;
           break;
         // Fx15 - LD DT, Vx
         case 0x0015:
@@ -353,5 +359,5 @@ void CHIP8::CPUCycle() {
   }
 
   pc += 2;
-
+  return (int)HaltState::NOT_HALTING;
 }
