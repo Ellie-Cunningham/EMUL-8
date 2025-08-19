@@ -4,11 +4,24 @@
 #include <chrono>
 #include <thread>
 #include <cstring>
+#include <cassert>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "CHIP8.h"
 
+// The miniaudio library contains one reference to MA_ASSERT before it is defined. To avoid issues in compilation it is defined here.
+#ifndef MA_ASSERT
+#define MA_ASSERT(condition)            assert(condition)
+#endif
+#define MINIAUDIO_IMPLEMENTATION
+#include <miniaudio/miniaudio.h>
+
 CHIP8 Chip8;
+
+ma_format audioDeviceFormat = ma_format_f32;
+int audioDeviceChannels = 2;
+int audioDeviceSampleRate = 48000;
+
 HaltState currentHaltState = NOT_HALTING;
 unsigned char keypadStateBeforeHalt[16];
 int keyPressedDuringHalt = 0;
@@ -71,6 +84,20 @@ void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
   glViewport(0, 0, width, height);
 }
 
+// Handles reading and writing audio data from ma_device objects.
+void dataCallback(ma_device* device, void* output, const void* input, ma_uint32 frameCount) {
+  ma_waveform* sineWave;
+
+  MA_ASSERT(device->playback.channels == audioDeviceChannels);
+
+  sineWave = (ma_waveform*)device->pUserData;
+  MA_ASSERT(sineWave != NULL);
+
+  ma_waveform_read_pcm_frames(sineWave, output, frameCount, NULL);
+
+  (void)input;
+}
+
 std::string readFile(char* filename) {
   std::ifstream file;
   std::stringstream buffer;
@@ -130,7 +157,8 @@ int generateShaderProgram(char* vertexShaderPath, char* fragmentShaderPath, char
 int main() {
   std::fill_n(keypadStateBeforeHalt, 16, 0);
 
-  // Step 1: setup graphics and input systems
+  // Step 1: setup graphics, input, and audio systems.
+  // Step 1.1: GLFW and GLAD setup.
   GLFWwindow* window;
   if(!glfwInit()) {
     std::cout << "GLFW couldn't start" << std::endl;
@@ -168,7 +196,28 @@ int main() {
   glEnableVertexAttribArray(0);
   glVertexAttribIPointer(0, 1, GL_BYTE, sizeof(char), 0);
 
-  // Step 2: Initialize system and load program
+  // Step 1.2: miniaudio setup.
+  ma_waveform sineWave;
+  ma_device_config deviceConfig;
+  ma_device device;
+  ma_waveform_config sineWaveConfig;
+
+  deviceConfig = ma_device_config_init(ma_device_type_playback);
+  deviceConfig.playback.format = audioDeviceFormat;
+  deviceConfig.playback.channels = audioDeviceChannels;
+  deviceConfig.sampleRate = audioDeviceSampleRate;
+  deviceConfig.dataCallback = dataCallback;
+  deviceConfig.pUserData = &sineWave;
+
+  if(ma_device_init(NULL, &deviceConfig, &device) != MA_SUCCESS) {
+    std::cout << "miniaudio couldn't open playback device." << std::endl;
+    return -1;
+  }
+
+  sineWaveConfig = ma_waveform_config_init(device.playback.format, device.playback.channels, device.sampleRate, ma_waveform_type_sine, 0.2, 400);
+  ma_waveform_init(&sineWaveConfig, &sineWave);
+
+  // Step 2: Initialize Chip8 and load program.
   Chip8.initialization();
   int programLoaded = Chip8.loadProgram();
   if(programLoaded != 0) {
@@ -176,7 +225,7 @@ int main() {
     return -1;
   }
 
-  // Step 3: Loop CPU cycles
+  // Step 3: Loop CPU cycles.
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   while(!glfwWindowShouldClose(window)) {
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -208,6 +257,15 @@ int main() {
           std::copy(Chip8.keypadState, Chip8.keypadState + 16, keypadStateBeforeHalt);
           break;
         }
+
+        // Checks if sound should start playing.
+        unsigned short ranOpcode = Chip8.getLastExecutedOpcode();
+        bool soundTimerSet = ((ranOpcode & 0xF0FF) == 0xF018);
+        if(soundTimerSet && Chip8.soundTimer != 0) {
+          if(ma_device_start(&device) != MA_SUCCESS) {
+            std::cout << "miniaudio couldn't start playback device." << std::endl;
+          }
+        }
       }
     }
 
@@ -220,6 +278,12 @@ int main() {
     }
     
     std::this_thread::sleep_until(startTime + std::chrono::milliseconds(16));
+
+    if(Chip8.soundTimer == 0) {
+      if(ma_device_get_state(&device) == ma_device_state_started) {
+        ma_device_stop(&device);
+      }
+    }
   }
 
   // Clean up buffers and arrays
