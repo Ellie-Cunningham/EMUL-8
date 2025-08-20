@@ -7,6 +7,8 @@
 #include <cassert>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <json/json.hpp>
+using json = nlohmann::json;
 #include "CHIP8.h"
 
 // The miniaudio library contains one reference to MA_ASSERT before it is defined. To avoid issues in compilation it is defined here.
@@ -18,6 +20,13 @@
 
 CHIP8 Chip8;
 
+/* config.json contains different parameters pertaining to things like audio, graphics, and controls.
+ * While a dedicated settings menu doesn't exist I believe this is a nice middle ground of providing
+ * user customization without increasing project scope far beyond what I desire.
+ */
+std::ifstream f("..\\src\\config.json");
+json config = json::parse(f);
+
 ma_format audioDeviceFormat = ma_format_f32;
 int audioDeviceChannels = 2;
 int audioDeviceSampleRate = 48000;
@@ -26,24 +35,7 @@ HaltState currentHaltState = NOT_HALTING;
 unsigned char keypadStateBeforeHalt[16];
 int keyPressedDuringHalt = 0;
 
-const int keyMap[] = {
-  GLFW_KEY_X, // 0
-  GLFW_KEY_1, // 1
-  GLFW_KEY_2, // 2
-  GLFW_KEY_3, // 3
-  GLFW_KEY_Q, // 4
-  GLFW_KEY_W, // 5
-  GLFW_KEY_E, // 6
-  GLFW_KEY_A, // 7
-  GLFW_KEY_S, // 8
-  GLFW_KEY_D, // 9
-  GLFW_KEY_Z, // A
-  GLFW_KEY_C, // B
-  GLFW_KEY_4, // C
-  GLFW_KEY_R, // D
-  GLFW_KEY_F, // E
-  GLFW_KEY_V  // F
-};
+int keyMap[16];
 
 const int windowWidth = 640;
 const int windowHeight = 360;
@@ -214,12 +206,32 @@ int main() {
     return -1;
   }
 
-  sineWaveConfig = ma_waveform_config_init(device.playback.format, device.playback.channels, device.sampleRate, ma_waveform_type_sine, 0.2, 400);
+  sineWaveConfig = ma_waveform_config_init(
+    device.playback.format,
+    device.playback.channels,
+    device.sampleRate,
+    ma_waveform_type_sine,
+    config["audio"]["volume"],
+    config["audio"]["sineWaveFrequency"]
+  );
   ma_waveform_init(&sineWaveConfig, &sineWave);
+
+  // Step 1.3: Keypad setup.
+  try {
+    int i = 0;
+    for(auto& entry : config["controls"].items()) {
+      keyMap[i] = (int)((std::string)(entry.value())).c_str()[0];
+      i++;
+    }
+  }
+  catch(...) {
+    std::cout << "Error getting control keybinds. Entry may have been added or removed from config.json" << std:: endl;
+    return -1;
+  }
 
   // Step 2: Initialize Chip8 and load program.
   Chip8.initialization();
-  int programLoaded = Chip8.loadProgram();
+  int programLoaded = Chip8.loadProgram(config["general"]["romFileName"]);
   if(programLoaded != 0) {
     std::cout << "Error Accessing ROM" << std::endl;
     return -1;
@@ -249,7 +261,7 @@ int main() {
     glfwSwapBuffers(window);
 
     if(currentHaltState == HaltState::NOT_HALTING) {
-      for(int i = 0; i < 10; i++) {
+      for(int i = 0; i < config["general"]["cpuCyclesPerFrame"]; i++) {
         glfwPollEvents();
         currentHaltState = (HaltState)Chip8.CPUCycle();
 

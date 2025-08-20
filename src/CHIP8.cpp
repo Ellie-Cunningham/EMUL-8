@@ -73,12 +73,10 @@ void CHIP8::initialization() {
   }
 }
 
-int CHIP8::loadProgram() {
+int CHIP8::loadProgram(std::string fileName) {
   // Open ROM file.
   std::fstream fout;
-  // fout.open("..\\testROM\\Pong (1 player).ch8", std::ios::in | std::ios::binary);
-  // fout.open("..\\testROM\\br8kout.ch8", std::ios::in | std::ios::binary);
-  fout.open("..\\testROM\\6-keypad.ch8", std::ios::in | std::ios::binary);
+  fout.open("..\\testROM\\" + fileName, std::ios::in | std::ios::binary);
   if(!fout) {
     return -1;
   }

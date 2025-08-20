@@ -38,7 +38,7 @@ class CHIP8 {
     void registerValueOverride(int registerIndex, int registerValue);
     void outputScreenToConsole();
     void initialization();
-    int loadProgram();
+    int loadProgram(std::string fileName);
     int CPUCycle();
 };
 #endif
