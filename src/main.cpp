@@ -9,6 +9,8 @@
 #include <GLFW/glfw3.h>
 #include <json/json.hpp>
 using json = nlohmann::json;
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb/stb_image.h>
 #include "CHIP8.h"
 
 // The miniaudio library contains one reference to MA_ASSERT before it is defined. To avoid issues in compilation it is defined here.
@@ -157,10 +159,21 @@ int main() {
     return -1;
   }
 
-  window = glfwCreateWindow(screenWidth * pixelSize, screenHeight * pixelSize, "EMUL-8 DevBuild", NULL, NULL);
+  window = glfwCreateWindow(screenWidth * pixelSize, screenHeight * pixelSize, "EMUL-8", NULL, NULL);
   glfwMakeContextCurrent(window);
   glfwSetKeyCallback(window, keyCallback);
   glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+
+  GLFWimage icon[1];
+  icon[0].pixels = stbi_load("..\\8).png", &icon[0].width, &icon[0].height, 0, 4);
+
+  if(icon[0].pixels) {
+    glfwSetWindowIcon(window, 1, icon);
+    stbi_image_free(icon[0].pixels);
+  }
+  else {
+    std::cout << "Couldn't load window icon." << std::endl;
+  }
 
   if(!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
     std::cout << "GLAD couldn't start" << std::endl;
@@ -175,6 +188,15 @@ int main() {
   glUniform1i(glGetUniformLocation(shaderProgram, "width"), screenWidth);
   glUniform1f(glGetUniformLocation(shaderProgram, "cellWidth"), 2.0f / (float)(screenWidth));
   glUniform1f(glGetUniformLocation(shaderProgram, "cellHeight"), 2.0f / (float)(screenHeight));
+
+  float primaryColor[] = {
+    config["graphics"]["primaryColorRGB"][0],
+    config["graphics"]["primaryColorRGB"][1],
+    config["graphics"]["primaryColorRGB"][2]
+  };
+  glUniform1f(glGetUniformLocation(shaderProgram, "red"), primaryColor[0]/255.0f);
+  glUniform1f(glGetUniformLocation(shaderProgram, "green"), primaryColor[1]/255.0f);
+  glUniform1f(glGetUniformLocation(shaderProgram, "blue"), primaryColor[2]/255.0f);
 
   GLuint VAO;
   glGenVertexArrays(1, &VAO);
@@ -238,7 +260,13 @@ int main() {
   }
 
   // Step 3: Loop CPU cycles.
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  float backgroundColor[] = {
+    config["graphics"]["backgroundColorRGB"][0],
+    config["graphics"]["backgroundColorRGB"][1],
+    config["graphics"]["backgroundColorRGB"][2]
+  };
+  glClearColor(backgroundColor[0]/255.0f, backgroundColor[1]/255.0f, backgroundColor[2]/255.0f, 1.0f);
+
   while(!glfwWindowShouldClose(window)) {
     auto startTime = std::chrono::high_resolution_clock::now();
     glfwPollEvents();

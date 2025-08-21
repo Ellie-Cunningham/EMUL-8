@@ -1,5 +1,5 @@
 {
-  "comment": "Adding or removing lines can break the emulator. Please only modify values to the right of a semicolon if you know what you're doing.",
+  "comment": "Adding or removing lines can break the emulator. Please only modify values to the right of a colon if you know what you're doing.",
   "general": {
     "romFileName": "Pong (1 player).ch8",
     "cpuCyclesPerFrame": 10
@@ -23,12 +23,12 @@
     "keyF": "V"
   },
   "graphics": {
-    "comment": "Graphics settings currently unsupported.",
+    "comment": "Each list should contain 3 numbers between 0 and 255.",
     "backgroundColorRGB": [0, 0, 0],
     "primaryColorRGB": [255, 255, 255] 
   },
   "audio": {
-    "comment": "Volume should be set to a float between 0 and 1.",
+    "comment": "Volume should be set to a float (decimal) between 0 and 1.",
     "volume": 0.2,
     "sineWaveFrequency": 400
   }
