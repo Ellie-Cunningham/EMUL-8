@@ -26,7 +26,7 @@ CHIP8 Chip8;
  * While a dedicated settings menu doesn't exist I believe this is a nice middle ground of providing
  * user customization without increasing project scope far beyond what I desire.
  */
-std::ifstream f("..\\src\\config.json");
+std::ifstream f("config.json");
 json config = json::parse(f);
 
 ma_format audioDeviceFormat = ma_format_f32;
@@ -165,7 +165,7 @@ int main() {
   glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
   GLFWimage icon[1];
-  icon[0].pixels = stbi_load("..\\8).png", &icon[0].width, &icon[0].height, 0, 4);
+  icon[0].pixels = stbi_load("8).png", &icon[0].width, &icon[0].height, 0, 4);
 
   if(icon[0].pixels) {
     glfwSetWindowIcon(window, 1, icon);
@@ -183,7 +183,7 @@ int main() {
 
   framebufferSizeCallback(window, screenWidth * pixelSize, screenHeight * pixelSize);
 
-  GLuint shaderProgram = generateShaderProgram("..\\src\\shaders\\main.vert", "..\\src\\shaders\\main.frag", "..\\src\\shaders\\main.geom");
+  GLuint shaderProgram = generateShaderProgram("shaders\\main.vert", "shaders\\main.frag", "shaders\\main.geom");
   glUseProgram(shaderProgram);
   glUniform1i(glGetUniformLocation(shaderProgram, "width"), screenWidth);
   glUniform1f(glGetUniformLocation(shaderProgram, "cellWidth"), 2.0f / (float)(screenWidth));

@@ -4,7 +4,8 @@ project(EMUL-8 VERSION 1.0.0)
 set(SOURCE_FILES
   src/main.cpp
   src/CHIP8.cpp
-  src/glad.c)
+  src/glad.c
+  resources.rc)
 
 find_package(OpenGL REQUIRED)
 

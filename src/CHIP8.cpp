@@ -76,7 +76,7 @@ void CHIP8::initialization() {
 int CHIP8::loadProgram(std::string fileName) {
   // Open ROM file.
   std::fstream fout;
-  fout.open("..\\testROM\\" + fileName, std::ios::in | std::ios::binary);
+  fout.open("ROMs\\" + fileName, std::ios::in | std::ios::binary);
   if(!fout) {
     return -1;
   }
